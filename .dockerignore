@@ -1,0 +1,8 @@
+target/
+.git/
+.idea/
+.vscode/
+tiles/
+tiles-gcj/
+scripts/data/*.pbf
+*.log

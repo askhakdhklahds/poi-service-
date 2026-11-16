@@ -1,0 +1,82 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: poi-service
+  config:
+    import: optional:file:${user.home}/.env[.properties],optional:file:D:/jue/agent3/.env[.properties]
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:5432/poi
+    username: postgres
+    password: postgres
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+  cache:
+    type: redis
+    redis:
+      time-to-live: 5m
+      cache-null-values: false
+  jackson:
+    default-property-inclusion: non_null
+
+auth:
+  jwt:
+    secret: ${AUTH_JWT_SECRET:poi-service-demo-secret-key-change-in-production-2026}
+    expiration-minutes: 120
+
+rate-limit:
+  enabled: ${RATE_LIMIT_ENABLED:true}
+  capacity: ${RATE_LIMIT_CAPACITY:120}
+  period-minutes: ${RATE_LIMIT_PERIOD_MINUTES:1}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+geoserver:
+  url: http://localhost:8080/geoserver
+  username: admin
+  password: geoserver
+
+route:
+  valhalla:
+    enabled: ${ROUTE_VALHALLA_ENABLED:true}
+    base-url: ${VALHALLA_BASE_URL:https://valhalla1.openstreetmap.de}
+    timeout-seconds: ${VALHALLA_TIMEOUT:8}
+
+tiles:
+  dir: ${TILES_DIR:D:/jue/gis/poi-service/tiles}
+  gcj:
+    dir: ${TILES_GCJ_DIR:D:/jue/gis/poi-service/tiles-gcj}
+  public-base-url: ${TILES_PUBLIC_BASE_URL:}
+  public-gcj-base-url: ${TILES_PUBLIC_GCJ_BASE_URL:}
+
+agent:
+  default-lon: 114.3055
+  default-lat: 30.5928
+  default-radius: 1000
+  llm:
+    enabled: ${AGENT_LLM_ENABLED:true}
+    base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
+    model: ${DEEPSEEK_MODEL:deepseek-chat}
+    api-key: ${DEEPSEEK_API_KEY:}
+    timeout-seconds: ${LLM_TIMEOUT:60}
+
+logging:
+  level:
+    org.springframework.jdbc.core: INFO

@@ -1,0 +1,48 @@
+# Build output
+target/
+*.class
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+
+# Logs
+*.log
+jmeter.log
+
+# Local temp / eval artifacts / tokens
+.tmp/
+tmp/
+
+# Generated tiles and large data
+tiles/
+tiles-gcj/
+
+# Local env / secrets
+.env
+.env.*
+!.env.example
+
+# Local database / data dumps
+data/
+*.sqlite3
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backup files
+*.bak
+
+# Screenshots: only keep the ones referenced by README
+shot_*.png
+!shot_agent_ui.png
+!shot_basemap_z18.png
+!shot_life_circle_cdp.png
+!shot_route_cdp.png
+!shot_route_page.png
+!shot_index_ui.png
+!shot_all_tiles_toggle.png
+!shot_agent_toggle.png

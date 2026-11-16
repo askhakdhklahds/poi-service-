@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>POI 全量点图层（GeoJSON）</title>
+  <link rel="stylesheet" href="/vendor/leaflet.css" />
+  <style>
+    html, body, #map { height: 100%; margin: 0; }
+    #panel {
+      position: absolute; top: 12px; left: 12px; z-index: 1000;
+      background: rgba(255,255,255,.96); padding: 12px 14px; border-radius: 10px;
+      font: 14px/1.6 system-ui, "Microsoft YaHei", sans-serif;
+      box-shadow: 0 4px 16px rgba(0,0,0,.18);
+    }
+    #panel a { color: #2563eb; }
+    #status { color: #334155; }
+    .legend { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid #e2e8f0; max-width: 260px; }
+    .legend span { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #475569; }
+    .legend i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  </style>
+</head>
+<body>
+<div id="map"></div>
+<div id="panel">
+  <b>POI 全量点图层（GeoJSON）</b><br/>
+  <span id="status">加载中…</span><br/>
+  <a href="/">返回周边查询</a> · <a href="/mvt.html">MVT 页面</a>
+  <div class="legend" id="legend"></div>
+</div>
+<script src="/vendor/leaflet.js"></script>
+<script>
+const map = L.map('map', { preferCanvas: true }).setView([31.2304, 121.4737], 11);
+const COLORS = {
+  '餐饮': '#ef4444', '购物': '#f59e0b', '医院': '#dc2626',
+  '学校': '#8b5cf6', '交通': '#2563eb', '景点': '#10b981',
+  '商业': '#ec4899', '其他': '#64748b'
+};
+function colorFor(category) { return COLORS[category] || '#64748b'; }
+const legend = document.getElementById('legend');
+if (legend) {
+  legend.innerHTML = Object.entries(COLORS).map(([name, color]) =>
+    `<span><i style="background:${color}"></i>${name}</span>`).join('');
+}
+
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 18,
+  attribution: 'Tiles &copy; Esri'
+}).addTo(map);
+
+const canvas = L.canvas({ padding: 0.5 });
+
+fetch('/api/poi/geojson?limit=50000')
+  .then(r => r.json())
+  .then(data => {
+    const layer = L.geoJSON(data, {
+      renderer: canvas,
+      pointToLayer: (feature, latlng) => L.circleMarker(latlng, {
+        renderer: canvas,
+        radius: 2.8,
+        color: '#ffffff',
+        fillColor: colorFor(feature.properties && feature.properties.category),
+        fillOpacity: 0.9,
+        weight: 0.5
+      }),
+    }).addTo(map);
+
+    layer.on('click', async (e) => {
+      const id = e.layer.feature.properties.id;
+      try {
+        const json = await (await fetch(`/api/poi/${id}`)).json();
+        const d = json.data;
+        L.popup()
+          .setLatLng(e.latlng)
+          .setContent(`
+            <b>${d.name || '未命名'}</b><br/>
+            分类：${d.category || '—'}<br/>
+            经纬度：${Number(d.lng).toFixed(6)}, ${Number(d.lat).toFixed(6)}<br/>
+            所属区：${d.district_name || '—'}<br/>
+            来源：${d.source_id || '—'}<br/>
+            ID：${d.id}
+          `)
+          .openOn(map);
+      } catch (err) {
+        L.popup().setLatLng(e.latlng)
+          .setContent('详情加载失败').openOn(map);
+      }
+    });
+
+    document.getElementById('status').textContent =
+      '已加载 ' + data.features.length + ' 个真实 POI（点击点看属性）';
+
+    const bounds = layer.getBounds();
+    if (bounds.isValid()) {
+      map.fitBounds(bounds, { padding: [20, 20] });
+    }
+  })
+  .catch(err => {
+    document.getElementById('status').textContent = '加载失败：' + err;
+  });
+</script>
+</body>
+</html>

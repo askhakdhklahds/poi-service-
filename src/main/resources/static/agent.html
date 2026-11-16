@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GeoAgent · 城市空间智能助手</title>
+  <link rel="icon" href="data:," />
+  <link href="/vendor/maplibre-gl.css" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #0f172a;
+      --muted: #64748b;
+      --line: #e2e8f0;
+      --blue: #2563eb;
+      --violet: #7c3aed;
+      --emerald: #10b981;
+      --bg: #eef3f9;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      font: 14px/1.65 system-ui, "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      overflow: hidden;
+    }
+    .topbar {
+      height: 64px; display: flex; align-items: center; justify-content: space-between;
+      padding: 0 18px;
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 52%, #6d28d9 100%);
+      color: #fff;
+      border-bottom: 0;
+      box-shadow: 0 8px 24px rgba(15,23,42,.18);
+      position: relative; z-index: 20;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .logo {
+      width: 38px; height: 38px; border-radius: 12px;
+      background: linear-gradient(135deg, var(--blue), var(--violet));
+      color: #fff; display: grid; place-items: center;
+      font-weight: 800; font-size: 18px; box-shadow: 0 6px 16px rgba(37,99,235,.28);
+    }
+    .brand .name { font-weight: 800; font-size: 17px; letter-spacing: .2px; }
+    .brand .sub { color: #cbd5e1; font-size: 12px; margin-top: -2px; }
+    .top-links { display: flex; gap: 8px; }
+    .top-links a {
+      color: #e2e8f0; text-decoration: none; font-size: 13px;
+      padding: 7px 12px; border-radius: 999px; transition: .2s;
+    }
+    .top-links a:hover { background: rgba(255,255,255,.14); color: #fff; }
+    .layout {
+      display: grid; grid-template-columns: minmax(0, 1.5fr) 430px;
+      height: calc(100vh - 64px);
+    }
+    .map-wrap { position: relative; min-width: 0; }
+    #map { position: absolute; inset: 0; }
+    .map-badge {
+      position: absolute; left: 14px; bottom: 14px; z-index: 5;
+      background: rgba(15,23,42,.72); color: #e2e8f0;
+      padding: 6px 12px; border-radius: 999px; font-size: 12px;
+      backdrop-filter: blur(8px);
+    }
+    .map-toggle {
+      position: absolute; top: 14px; left: 14px; z-index: 6;
+      border: 0; border-radius: 999px; padding: 7px 12px;
+      background: rgba(15,23,42,.72); color: #fff; font-size: 12px;
+      backdrop-filter: blur(8px); cursor: pointer;
+    }
+    .map-toggle:hover { background: rgba(15,23,42,.9); }
+    .chat-wrap {
+      display: flex; flex-direction: column; min-width: 0; height: 100%;
+      background: #fff; border-left: 1px solid var(--line);
+    }
+    .chat-head {
+      display: flex; align-items: center; gap: 10px;
+      padding: 14px 16px; border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, #fff, #f8fafc);
+    }
+    .ai-avatar {
+      width: 38px; height: 38px; border-radius: 12px;
+      background: linear-gradient(135deg, var(--blue), var(--violet));
+      color: #fff; display: grid; place-items: center; font-weight: 800; font-size: 13px;
+    }
+    .chat-title { font-weight: 700; font-size: 15px; }
+    .chat-sub { color: var(--muted); font-size: 12px; }
+    .status-dot {
+      margin-left: auto; width: 8px; height: 8px; border-radius: 50%;
+      background: var(--emerald); box-shadow: 0 0 0 4px rgba(16,185,129,.14);
+      animation: pulse 2s infinite;
+    }
+    .chat-log {
+      flex: 1; overflow-y: auto; padding: 16px;
+      background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+      scroll-behavior: smooth;
+    }
+    .msg { display: flex; gap: 8px; margin-bottom: 14px; animation: fadeIn .25s ease; }
+    .msg.me { flex-direction: row-reverse; }
+    .msg .avatar {
+      width: 30px; height: 30px; border-radius: 50%; flex: 0 0 30px;
+      background: linear-gradient(135deg, #94a3b8, #64748b);
+      color: #fff; display: grid; place-items: center; font-size: 11px; font-weight: 700;
+    }
+    .msg.bot .avatar { background: linear-gradient(135deg, var(--blue), var(--violet)); }
+    .bubble {
+      max-width: 86%; padding: 10px 13px; border-radius: 14px;
+      font-size: 13.5px; word-break: break-word;
+      background: #fff; border: 1px solid #e6edf5;
+      box-shadow: 0 2px 10px rgba(15,23,42,.04);
+    }
+    .msg.me .bubble {
+      background: linear-gradient(135deg, var(--blue), var(--violet));
+      color: #fff; border: 0; box-shadow: 0 6px 18px rgba(37,99,235,.24);
+    }
+    .bubble table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 12px; }
+    .bubble th, .bubble td { border: 1px solid #e2e8f0; padding: 5px 7px; text-align: left; }
+    .bubble th { background: #f1f5f9; font-weight: 700; }
+    .bubble ul { margin: 6px 0; padding-left: 20px; }
+    .bubble strong { color: #0b3b8c; }
+    .bubble code {
+      background: #f1f5f9; padding: 1px 5px; border-radius: 5px;
+      font-size: 12px; color: #7c3aed;
+    }
+    .typing { display: flex; gap: 4px; align-items: center; height: 18px; }
+    .typing span {
+      width: 6px; height: 6px; border-radius: 50%; background: #94a3b8;
+      animation: bounce 1.2s infinite;
+    }
+    .typing span:nth-child(2) { animation-delay: .15s; }
+    .typing span:nth-child(3) { animation-delay: .3s; }
+    .steps {
+      margin-top: 9px; border: 1px solid #e2e8f0; border-radius: 10px;
+      background: #f8fafc; overflow: hidden;
+    }
+    .steps summary {
+      cursor: pointer; padding: 7px 10px; font-size: 12px; color: #475569;
+      font-weight: 600; user-select: none;
+    }
+    .step { padding: 7px 10px; border-top: 1px dashed #e2e8f0; font-size: 12px; }
+    .step .tool {
+      display: inline-block; background: #dbeafe; color: #1d4ed8;
+      border-radius: 6px; padding: 0 6px; font-weight: 700;
+    }
+    .step .out { color: #0f766e; margin-left: 6px; }
+    .step .ms { float: right; color: #94a3b8; }
+    .step .input {
+      color: #64748b; margin-top: 3px; font-family: ui-monospace, monospace;
+      font-size: 11px; word-break: break-all;
+    }
+    .cards { margin-top: 9px; display: grid; gap: 8px; }
+    .card { border: 1px solid #e2e8f0; border-radius: 10px; padding: 9px 10px; background: #fff; }
+    .card-title { font-weight: 700; font-size: 12px; margin-bottom: 6px; color: #334155; }
+    .stat-row { display: grid; grid-template-columns: 90px 1fr 44px; gap: 8px; align-items: center; margin: 4px 0; font-size: 12px; }
+    .bar { height: 7px; border-radius: 999px; background: #eef2f7; overflow: hidden; }
+    .bar > i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #60a5fa, #7c3aed); }
+    .route-row { display: flex; gap: 8px; padding: 4px 0; border-bottom: 1px dashed #eef2f7; font-size: 12px; }
+    .route-row:last-child { border-bottom: 0; }
+    .route-order {
+      width: 20px; height: 20px; border-radius: 50%; flex: 0 0 20px;
+      background: linear-gradient(135deg, var(--blue), var(--violet));
+      color: #fff; display: grid; place-items: center; font-size: 11px; font-weight: 700;
+    }
+    .chat-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+    .ghost {
+      border: 1px solid #dbe3ee; background: #fff; color: #475569;
+      border-radius: 9px; padding: 5px 9px; font-size: 12px; cursor: pointer;
+      transition: .15s;
+    }
+    .ghost:hover { border-color: #93c5fd; color: #1d4ed8; background: #eff6ff; }
+    .caps { display: flex; flex-wrap: wrap; gap: 5px; padding: 0 16px 10px; }
+    .caps span {
+      background: #eff6ff; color: #1d4ed8; border: 1px solid #dbeafe;
+      border-radius: 999px; padding: 2px 8px; font-size: 11px;
+    }
+    .suggestions {
+      display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 14px;
+      border-top: 1px solid #f1f5f9;
+    }
+    .suggestions button {
+      border: 1px solid #dbeafe; background: #eff6ff; color: #1d4ed8;
+      padding: 5px 10px; border-radius: 999px; font-size: 12px; cursor: pointer;
+      transition: .2s;
+    }
+    .suggestions button:hover { background: #dbeafe; transform: translateY(-1px); }
+    .composer {
+      display: flex; gap: 8px; padding: 10px 14px 6px;
+      border-top: 1px solid var(--line); background: #fff;
+    }
+    .composer textarea {
+      flex: 1; resize: none; border: 1px solid #dbe3ee; border-radius: 12px;
+      padding: 9px 11px; font: inherit; font-size: 13px; outline: none;
+      max-height: 90px; transition: .2s;
+    }
+    .composer textarea:focus { border-color: #93c5fd; box-shadow: 0 0 0 3px rgba(59,130,246,.12); }
+    .composer button {
+      border: 0; border-radius: 12px; padding: 0 18px; cursor: pointer;
+      background: linear-gradient(135deg, var(--blue), var(--violet));
+      color: #fff; font-weight: 700; transition: .2s;
+    }
+    .composer button:disabled { opacity: .55; cursor: not-allowed; }
+    .footer-hint { padding: 0 14px 10px; color: #94a3b8; font-size: 11px; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
+    @keyframes bounce { 0%,60%,100% { transform: none; } 30% { transform: translateY(-4px); } }
+    @media (max-width: 900px) {
+      body { overflow: auto; }
+      .layout { grid-template-columns: 1fr; grid-template-rows: 45vh auto; height: auto; }
+      .chat-wrap { height: 55vh; border-left: 0; border-top: 1px solid var(--line); }
+      .top-links a:not(:first-child) { display: none; }
+    }
+    .route-link {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 8px 12px;
+      border-radius: 9px;
+      background: #eff6ff;
+      color: #2563eb;
+      font-weight: 600;
+      text-decoration: none;
+      font-size: 13px;
+    }
+    .map-legend {
+      position: absolute;
+      left: 14px;
+      bottom: 46px;
+      z-index: 5;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      max-width: 330px;
+      padding: 8px 10px;
+      border-radius: 12px;
+      background: rgba(255,255,255,.92);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 8px 24px rgba(15,23,42,.12);
+      font-size: 11px;
+    }
+    .map-legend span { display: inline-flex; align-items: center; gap: 4px; color: #475569; }
+    .map-legend i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+    .agent-meta { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 7px; }
+    .pill {
+      background: #f1f5f9; color: #475569; border-radius: 999px;
+      padding: 2px 8px; font-size: 11px; font-weight: 600;
+    }
+    .pill.intent { background: #dbeafe; color: #1d4ed8; }
+    .pill.tools { background: #f3e8ff; color: #7c3aed; }
+    .trace-link {
+      display: inline-block; margin-top: 8px; margin-left: 8px;
+      font-size: 12px; color: #2563eb; text-decoration: none;
+    }
+    .trace-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">G</div>
+    <div>
+      <div class="name">GeoAgent</div>
+      <div class="sub">城市空间智能助手</div>
+    </div>
+  </div>
+  <div class="top-links">
+    <a href="/all-tiles.html">地图</a>
+    <a href="/life-circle.html">生活圈</a>
+    <a href="/login.html">登录</a>
+    <a href="/swagger-ui.html">API</a>
+  </div>
+</header>
+
+<main class="layout">
+  <section class="map-wrap">
+    <div id="map"></div>
+    <button class="map-toggle" id="toggle-poi">隐藏 POI</button>
+    <div class="map-legend" id="map-legend"></div>
+    <div class="map-badge">高德 GCJ-02 · 85,864 真实 POI</div>
+  </section>
+
+  <section class="chat-wrap">
+    <div class="chat-head">
+      <div class="ai-avatar">AI</div>
+      <div>
+        <div class="chat-title">GeoAgent · 城市空间分析师</div>
+        <div class="chat-sub">POI · 可达性 · 路网路线 · 诊断报告</div>
+      </div>
+      <div class="chat-actions">
+        <button class="ghost" onclick="generateReport()">诊断报告</button>
+        <button class="ghost" onclick="newSession()">新会话</button>
+        <div class="status-dot"></div>
+      </div>
+    </div>
+    <div class="caps">
+      <span>POI 周边</span><span>最近邻</span><span>区域对比</span>
+      <span>真实路网路线</span><span>空间诊断报告</span>
+    </div>
+
+    <div id="chat-log" class="chat-log">
+      <div class="msg bot">
+        <div class="avatar">AI</div>
+        <div class="bubble">
+          你好，我是 <strong>GeoAgent</strong>，一名城市空间分析师。<br/>
+          我能做 POI 周边、最近邻、区域对比、真实路网路线和空间诊断报告。<br/>
+          试试：人民广场附近 1 公里有哪些医院？
+        </div>
+      </div>
+    </div>
+
+    <div class="suggestions" id="suggestions">
+      <button>人民广场附近1公里有哪些医院</button>
+      <button>比较人民广场和外滩1公里的餐饮</button>
+      <button>从人民广场出发规划5个景点的路线</button>
+      <button>哪个区POI最多</button>
+      <button>人民广场附近哪类POI最多</button>
+      <button>那附近的餐厅呢？</button>
+    </div>
+
+    <div class="composer">
+      <textarea id="input" rows="1" placeholder="问点什么，例如：人民广场附近1公里有哪些医院？"></textarea>
+      <button id="send" onclick="send()">发送</button>
+    </div>
+    <div class="footer-hint">空间查询由确定性 SQL 工具执行，所以很快；LLM 只用于通用问答。</div>
+  </section>
+</main>
+
+<script src="/vendor/maplibre-gl.js"></script>
+<script>
+const ORIGIN = window.location.origin;
+const GCJ_CENTER = [121.478223, 31.228458];
+const COLORS = {
+  '餐饮': '#ef4444', '购物': '#f59e0b', '医院': '#dc2626',
+  '学校': '#8b5cf6', '交通': '#2563eb', '景点': '#10b981',
+  '商业': '#ec4899', '其他': '#64748b'
+};
+
+const mapLegend = document.getElementById('map-legend');
+if (mapLegend) {
+  mapLegend.innerHTML = Object.entries(COLORS).map(([name, color]) =>
+    `<span><i style="background:${color}"></i>${name}</span>`).join('');
+}
+
+const poiToggle = document.getElementById('toggle-poi');
+let poiVisible = true;
+if (poiToggle) {
+  poiToggle.addEventListener('click', () => {
+    poiVisible = !poiVisible;
+    if (map.getLayer('poi-bg')) {
+      map.setLayoutProperty('poi-bg', 'visibility', poiVisible ? 'visible' : 'none');
+    }
+    poiToggle.textContent = poiVisible ? '隐藏 POI' : '显示 POI';
+  });
+}
+
+const map = new maplibregl.Map({
+  container: 'map',
+  style: {
+    version: 8,
+    sources: {
+      amap: {
+        type: 'raster',
+        tiles: [
+          'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+          'https://webrd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+          'https://webrd03.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+          'https://webrd04.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}'
+        ],
+        tileSize: 256,
+        maxzoom: 18,
+        attribution: '&copy; 高德地图'
+      },
+      poi: {
+        type: 'vector',
+        tiles: [ORIGIN + '/tiles-gcj/{z}/{x}/{y}.pbf'],
+        minzoom: 9,
+        maxzoom: 13
+      }
+    },
+    layers: [
+      { id: 'amap', type: 'raster', source: 'amap' },
+      {
+        id: 'poi-bg',
+        type: 'circle',
+        source: 'poi',
+        'source-layer': 'poi',
+        paint: {
+          'circle-radius': 2.4,
+          'circle-color': [
+            'match', ['get', 'category'],
+            '餐饮', COLORS['餐饮'], '购物', COLORS['购物'], '医院', COLORS['医院'],
+            '学校', COLORS['学校'], '交通', COLORS['交通'], '景点', COLORS['景点'],
+            '商业', COLORS['商业'], COLORS['其他']
+          ],
+          'circle-opacity': 0.55
+        }
+      }
+    ]
+  },
+  center: GCJ_CENTER,
+  zoom: 12,
+  maxZoom: 18
+});
+
+map.dragRotate.disable();
+map.touchZoomRotate.disableRotation();
+map.setRenderWorldCopies(false);
+map.addControl(new maplibregl.NavigationControl(), 'top-right');
+map.addControl(new maplibregl.ScaleControl({ maxWidth: 110, unit: 'metric' }), 'bottom-right');
+
+let mapReady = false;
+let pendingDraw = null;
+
+map.on('load', async () => {
+  try {
+    const geo = await (await fetch(ORIGIN + '/districts_gcj.json')).json();
+    map.addSource('districts', { type: 'geojson', data: geo });
+    map.addLayer({
+      id: 'district-line', type: 'line', source: 'districts',
+      paint: { 'line-color': '#1d4ed8', 'line-width': 1, 'line-opacity': .55 }
+    });
+  } catch (e) {}
+
+  map.addSource('agent-results', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+  map.addLayer({
+    id: 'agent-results',
+    type: 'circle',
+    source: 'agent-results',
+    paint: {
+      'circle-radius': 6,
+      'circle-color': [
+        'match', ['get', 'category'],
+        '餐饮', COLORS['餐饮'], '购物', COLORS['购物'], '医院', COLORS['医院'],
+        '学校', COLORS['学校'], '交通', COLORS['交通'], '景点', COLORS['景点'],
+        '商业', COLORS['商业'], COLORS['其他']
+      ],
+      'circle-stroke-width': 2,
+      'circle-stroke-color': '#ffffff',
+      'circle-opacity': .95
+    }
+  });
+
+  map.addSource('agent-route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+  map.addLayer({
+    id: 'agent-route',
+    type: 'line',
+    source: 'agent-route',
+    paint: { 'line-color': '#7c3aed', 'line-width': 4, 'line-opacity': .9 }
+  });
+
+  map.on('click', 'agent-results', async (e) => {
+    const p = e.features[0].properties;
+    if (p.id) {
+      try {
+        const json = await (await fetch(`${ORIGIN}/api/poi/${p.id}`)).json();
+        const d = json.data;
+        new maplibregl.Popup().setLngLat(e.lngLat).setHTML(
+          `<b>${escapeHtml(d.name || '未命名')}</b><br/>` +
+          `${escapeHtml(d.category || '')} / ${escapeHtml(d.sub_category || '—')}<br/>` +
+          `${Number(d.lng).toFixed(6)}, ${Number(d.lat).toFixed(6)}<br/>` +
+          `所属区：${escapeHtml(d.district_name || '—')}`
+        ).addTo(map);
+      } catch (err) {}
+    }
+  });
+
+  mapReady = true;
+  if (pendingDraw) {
+    const data = pendingDraw;
+    pendingDraw = null;
+    drawResults(data);
+  }
+});
+
+const input = document.getElementById('input');
+const sendButton = document.getElementById('send');
+let busy = false;
+let sessionId = localStorage.getItem('agent_session')
+    || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()));
+localStorage.setItem('agent_session', sessionId);
+
+document.querySelectorAll('#suggestions button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    input.value = btn.textContent;
+    send();
+  });
+});
+
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    send();
+  }
+});
+
+async function send() {
+  const question = input.value.trim();
+  if (!question || busy) return;
+  busy = true;
+  sendButton.disabled = true;
+  addMessage('me', question);
+  input.value = '';
+
+  const typing = addTyping();
+  chatLog().scrollTop = chatLog().scrollHeight;
+
+  try {
+    const resp = await fetch(ORIGIN + '/api/agent/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question, sessionId })
+    });
+    const json = await resp.json();
+    typing.remove();
+    const data = json.data || {};
+    if (data.sessionId) {
+      sessionId = data.sessionId;
+      localStorage.setItem('agent_session', sessionId);
+    }
+    const answerHtml = renderMarkdown(data.answer || '没有返回结果');
+    addMessage('bot', answerHtml + renderMeta(data));
+    if (data.data || data.route) {
+      drawResults(data);
+    }
+  } catch (e) {
+    typing.remove();
+    addMessage('bot', '请求失败：' + escapeHtml(String(e)));
+  } finally {
+    busy = false;
+    sendButton.disabled = false;
+    chatLog().scrollTop = chatLog().scrollHeight;
+  }
+}
+
+function chatLog() {
+  return document.getElementById('chat-log');
+}
+
+function addMessage(role, content) {
+  const wrap = document.createElement('div');
+  wrap.className = 'msg ' + role;
+  const avatar = document.createElement('div');
+  avatar.className = 'avatar';
+  avatar.textContent = role === 'me' ? '你' : 'AI';
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  if (role === 'me') {
+    bubble.textContent = content;
+  } else {
+    bubble.innerHTML = content;
+  }
+  wrap.appendChild(avatar);
+  wrap.appendChild(bubble);
+  chatLog().appendChild(wrap);
+  chatLog().scrollTop = chatLog().scrollHeight;
+  return wrap;
+}
+
+function addTyping() {
+  const wrap = document.createElement('div');
+  wrap.className = 'msg bot';
+  wrap.innerHTML = `<div class="avatar">AI</div><div class="bubble"><div class="typing"><span></span><span></span><span></span></div></div>`;
+  chatLog().appendChild(wrap);
+  chatLog().scrollTop = chatLog().scrollHeight;
+  return wrap;
+}
+
+function renderMeta(d) {
+  let html = '';
+  if (d.intent || d.agentType || d.engine || d.toolsUsed) {
+    const tools = (d.toolsUsed || []).map(escapeHtml).join(', ');
+    html += `<div class="agent-meta">
+      <span class="pill intent">${escapeHtml(d.intent || '')}</span>
+      <span class="pill">${escapeHtml(d.agentType || '')}</span>
+      <span class="pill">${escapeHtml(d.engine || '')}</span>
+      <span class="pill">${d.latencyMs || 0}ms</span>
+      ${tools ? `<span class="pill tools">tools: ${tools}</span>` : ''}
+    </div>`;
+  }
+  if (d.steps && d.steps.length) {
+    html += `<details class="steps" open><summary>Agent 执行轨迹（${d.steps.length}）</summary>`;
+    for (const s of d.steps) {
+      html += `<div class="step">
+        <span class="tool">${escapeHtml(s.tool || '')}</span>
+        <span class="out">${escapeHtml(s.output || '')}</span>
+        <span class="ms">${s.ms || 0}ms</span>
+        <div class="input">${escapeHtml(s.input || '')}</div>
+      </div>`;
+    }
+    html += '</details>';
+  }
+  if (d.cards && d.cards.length) {
+    html += '<div class="cards">';
+    for (const card of d.cards) {
+      html += `<div class="card"><div class="card-title">${escapeHtml(card.title || '')}</div>`;
+      if (card.type === 'stats') {
+        const values = (card.rows || []).map(r => Number(r.value) || 0);
+        const max = Math.max(1, ...values);
+        for (const r of card.rows || []) {
+          const v = Number(r.value) || 0;
+          html += `<div class="stat-row">
+            <span>${escapeHtml(r.label || '')}</span>
+            <span class="bar"><i style="width:${Math.max(3, v / max * 100)}%"></i></span>
+            <span>${v}</span>
+          </div>`;
+        }
+      } else if (card.type === 'route') {
+        for (const r of card.rows || []) {
+          html += `<div class="route-row">
+            <span class="route-order">${escapeHtml(String(r.order || ''))}</span>
+            <span style="flex:1">${escapeHtml(r.name || '')}</span>
+            <span style="color:#64748b">${r.distance_m || 0} m${r.duration_s ? ' · ' + Math.max(1, Math.round(r.duration_s / 60)) + ' 分钟' : ''}</span>
+          </div>`;
+        }
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+  if (d.routePlanUrl) {
+    html += `<a class="route-link" href="${escapeHtml(d.routePlanUrl)}" target="_blank" rel="noopener">查看多路线对比 →</a>`;
+  }
+  if (d.requestId) {
+    html += `<a class="trace-link" href="/api/agent/trace/${encodeURIComponent(d.requestId)}" target="_blank" rel="noopener">查看工具轨迹</a>`;
+  }
+  return html;
+}
+
+function drawResults(d) {
+  if (!mapReady) {
+    pendingDraw = d;
+    return;
+  }
+  const features = [];
+  const coords = [];
+  for (const row of (d.data || [])) {
+    if (!row.geojson) continue;
+    let geo;
+    try { geo = JSON.parse(row.geojson); } catch (e) { continue; }
+    features.push({
+      type: 'Feature',
+      geometry: geo,
+      properties: {
+        id: row.id,
+        name: row.name,
+        category: row.category,
+        sub_category: row.sub_category,
+        distance_m: row.distance_m,
+        order: row.order,
+        area: row.area
+      }
+    });
+    coords.push(geo.coordinates);
+  }
+  map.getSource('agent-results').setData({ type: 'FeatureCollection', features });
+
+  if (d.routeGeoJson) {
+    map.getSource('agent-route').setData(d.routeGeoJson);
+    collectRouteCoords(d.routeGeoJson, coords);
+  } else if (d.route && d.route.length > 1) {
+    map.getSource('agent-route').setData({
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: d.route },
+        properties: {}
+      }]
+    });
+    coords.push(...d.route);
+  } else {
+    map.getSource('agent-route').setData({ type: 'FeatureCollection', features: [] });
+  }
+
+  if (coords.length) {
+    let bounds = new maplibregl.LngLatBounds(coords[0], coords[0]);
+    for (const c of coords) bounds.extend(c);
+    map.fitBounds(bounds, { padding: 70, maxZoom: 15, duration: 700 });
+  }
+}
+
+function renderMarkdown(raw) {
+  if (!raw) return '';
+  const text = escapeHtml(String(raw));
+  const lines = text.replace(/\r/g, '').split('\n');
+  let html = '';
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (/^\s*\|/.test(line)) {
+      const rows = [];
+      let j = i;
+      while (j < lines.length && /^\s*\|/.test(lines[j])) {
+        rows.push(lines[j]);
+        j++;
+      }
+      html += '<table>';
+      let rowIndex = 0;
+      for (const row of rows) {
+        if (/^\s*\|?[\s:\-|]+\|?\s*$/.test(row)) continue;
+        const cells = row.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map(c => c.trim());
+        const tag = rowIndex === 0 ? 'th' : 'td';
+        html += '<tr>' + cells.map(c => `<${tag}>${inline(c)}</${tag}>`).join('') + '</tr>';
+        rowIndex++;
+      }
+      html += '</table>';
+      i = j;
+      continue;
+    }
+    if (/^\s*[-*•]\s+/.test(line)) {
+      html += '<ul>';
+      while (i < lines.length && /^\s*[-*•]\s+/.test(lines[i])) {
+        html += `<li>${inline(lines[i].replace(/^\s*[-*•]\s+/, ''))}</li>`;
+        i++;
+      }
+      html += '</ul>';
+      continue;
+    }
+    if (line.trim() === '') {
+      html += '<br/>';
+      i++;
+      continue;
+    }
+    html += `<div>${inline(line)}</div>`;
+    i++;
+  }
+  return html;
+}
+
+function inline(s) {
+  return s
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`(.+?)`/g, '<code>$1</code>');
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+async function generateReport() {
+  if (busy) return;
+  busy = true;
+  sendButton.disabled = true;
+  addMessage('me', '生成空间诊断报告');
+  const typing = addTyping();
+  try {
+    const resp = await fetch(ORIGIN + '/api/agent/report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId })
+    });
+    const json = await resp.json();
+    typing.remove();
+    const data = json.data || {};
+    if (data.sessionId) {
+      sessionId = data.sessionId;
+      localStorage.setItem('agent_session', sessionId);
+    }
+    addMessage('bot', renderMarkdown(data.answer || '报告生成失败') + renderMeta(data));
+  } catch (e) {
+    typing.remove();
+    addMessage('bot', '报告生成失败：' + escapeHtml(String(e)));
+  } finally {
+    busy = false;
+    sendButton.disabled = false;
+    chatLog().scrollTop = chatLog().scrollHeight;
+  }
+}
+
+async function newSession() {
+  try {
+    await fetch(`${ORIGIN}/api/agent/session/${encodeURIComponent(sessionId)}/clear`,
+        { method: 'POST' });
+  } catch (e) {}
+  sessionId = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
+  localStorage.setItem('agent_session', sessionId);
+  chatLog().innerHTML = '';
+  addMessage('bot', '新会话已开始。我是 <strong>GeoAgent</strong>，专注城市 POI 空间分析。');
+  if (map.getSource('agent-results')) {
+    map.getSource('agent-results').setData({ type: 'FeatureCollection', features: [] });
+    map.getSource('agent-route').setData({ type: 'FeatureCollection', features: [] });
+  }
+}
+
+function collectRouteCoords(geojson, out) {
+  if (!geojson) return;
+  if (geojson.type === 'FeatureCollection') {
+    for (const feature of geojson.features || []) {
+      collectRouteCoords(feature, out);
+    }
+  } else if (geojson.type === 'Feature') {
+    collectRouteCoords(geojson.geometry, out);
+  } else if (geojson.type === 'LineString') {
+    out.push(...(geojson.coordinates || []));
+  } else if (geojson.type === 'MultiLineString') {
+    for (const line of geojson.coordinates || []) {
+      out.push(...line);
+    }
+  }
+}
+
+const urlQuery = new URLSearchParams(location.search).get('q');
+if (urlQuery) {
+  input.value = urlQuery;
+  setTimeout(send, 600);
+}
+</script>
+</body>
+</html>

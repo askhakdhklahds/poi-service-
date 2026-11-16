@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>城市 POI 空间分析</title>
+  <link rel="stylesheet" href="/vendor/leaflet.css" />
+  <style>
+    html, body, #map { height: 100%; margin: 0; }
+    #panel {
+      position: absolute; top: 12px; left: 12px; z-index: 1000;
+      background: rgba(255,255,255,.94); padding: 16px; border-radius: 18px;
+      width: 340px; max-height: calc(100vh - 24px); overflow: auto;
+      font: 14px/1.6 system-ui, "Microsoft YaHei", sans-serif;
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,.7);
+      box-shadow: 0 18px 45px rgba(15,23,42,.18);
+    }
+    #panel h3 { margin: 0 0 10px; font-size: 16px; }
+    .row { margin-bottom: 8px; }
+    .row label { display: inline-block; width: 44px; color: #555; }
+    input, select { width: 205px; padding: 5px 7px; box-sizing: border-box; border: 1px solid #dbe3ee; border-radius: 8px; }
+    button { padding: 5px 10px; margin-right: 4px; cursor: pointer; border: 1px solid #dbe3ee; border-radius: 8px; background: #fff; }
+    button:hover { border-color: #93c5fd; color: #1d4ed8; background: #eff6ff; }
+    #stats { margin-top: 10px; font-size: 13px; color: #333; max-height: 180px; overflow: auto; }
+    .legend { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid #e2e8f0; }
+    .legend span { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #475569; }
+    .legend i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+    .hint { color: #888; font-size: 12px; }
+    a { color: #2563eb; }
+    .quick-title { margin: 12px 0 8px; font-size: 12px; font-weight: 700; color: #64748b; letter-spacing: .08em; }
+    .quick-links { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .quick-card {
+      display: flex; flex-direction: column; gap: 2px;
+      padding: 10px 11px; border-radius: 12px; text-decoration: none;
+      background: linear-gradient(145deg, #f8fafc, #eef2ff);
+      border: 1px solid #e2e8f0; transition: .2s;
+    }
+    .quick-card:hover { transform: translateY(-2px); border-color: #93c5fd; box-shadow: 0 8px 18px rgba(37,99,235,.12); }
+    .quick-card b { font-size: 12px; color: #0f172a; }
+    .quick-card span { font-size: 10.5px; color: #64748b; line-height: 1.4; }
+    .quick-card.wide { grid-column: 1 / -1; }
+    #chat {
+      position: absolute; right: 12px; left: auto; bottom: 12px; z-index: 1000;
+      width: 360px; border-radius: 18px; overflow: hidden;
+      background: rgba(255,255,255,.94); backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,.7);
+      box-shadow: 0 18px 45px rgba(15,23,42,.2);
+      font: 14px/1.6 system-ui, "Microsoft YaHei", sans-serif;
+    }
+    .chat-head {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 14px;
+      background: linear-gradient(135deg, #0f172a, #1e3a8a 55%, #6d28d9);
+      color: #fff;
+    }
+    .chat-badge {
+      width: 32px; height: 32px; border-radius: 10px;
+      background: rgba(255,255,255,.18); display: grid; place-items: center;
+      font-weight: 800; font-size: 12px;
+    }
+    .chat-title { font-weight: 700; font-size: 14px; }
+    .chat-sub { font-size: 11px; color: #cbd5e1; }
+    .chat-dot { margin-left: auto; width: 8px; height: 8px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 0 4px rgba(34,197,94,.18); }
+    #chat-log { max-height: 190px; overflow: auto; padding: 12px 14px; background: #f8fafc; }
+    #chat-log .msg { margin-bottom: 8px; padding: 8px 10px; border-radius: 10px; background: #fff; box-shadow: 0 2px 8px rgba(15,23,42,.04); white-space: pre-wrap; }
+    #chat-log .me { margin-left: 28px; background: linear-gradient(135deg, #2563eb, #7c3aed); color: #fff; }
+    #chat-log .bot { margin-right: 20px; }
+    .chat-row { display: flex; gap: 8px; padding: 10px 12px; background: #fff; border-top: 1px solid #e2e8f0; }
+    .chat-row input { flex: 1; width: auto; padding: 8px 10px; border: 1px solid #dbe3ee; border-radius: 10px; outline: none; }
+    .chat-row input:focus { border-color: #93c5fd; box-shadow: 0 0 0 3px rgba(59,130,246,.12); }
+    .chat-row button { border: 0; border-radius: 10px; padding: 8px 14px; background: linear-gradient(135deg, #2563eb, #7c3aed); color: #fff; font-weight: 700; cursor: pointer; }
+    .chat-hint { padding: 0 14px 10px; background: #fff; margin-top: 0; }
+  </style>
+</head>
+<body>
+<div id="map"></div>
+<div id="panel">
+  <h3>城市 POI 空间分析</h3>
+  <div class="row"><label>经度</label><input id="lon" value="121.4737" /></div>
+  <div class="row"><label>纬度</label><input id="lat" value="31.2304" /></div>
+  <div class="row"><label>半径</label><input id="radius" type="number" value="2000" /> 米</div>
+  <div class="row"><label>分类</label>
+    <select id="category">
+      <option value="">全部</option>
+      <option>餐饮</option><option>购物</option><option>医院</option>
+      <option>学校</option><option>交通</option><option>景点</option>
+      <option>商业</option><option>其他</option>
+    </select>
+  </div>
+  <div class="row">
+    <button onclick="queryWithin()">周边查询</button>
+    <button onclick="queryNearest()">最近邻</button>
+    <button onclick="queryBuffer()">分类统计</button>
+  </div>
+  <div class="legend" id="legend"></div>
+  <div class="hint">点击地图任意位置查询；最多显示 500 个点</div>
+  <div class="quick-title">快捷入口</div>
+  <div class="quick-links">
+    <a class="quick-card" href="/all-tiles.html"><b>全量瓦片</b><span>8.5 万 POI · 分类配色</span></a>
+    <a class="quick-card" href="/agent.html"><b>GeoAgent</b><span>工具调用 · 路线</span></a>
+    <a class="quick-card" href="/life-circle.html"><b>15 分钟生活圈</b><span>人口覆盖 · 盲区</span></a>
+    <a class="quick-card" href="/route.html"><b>多路线对比</b><span>驾车/步行 · 沿途</span></a>
+    <a class="quick-card wide" href="/mvt.html"><b>动态 MVT</b><span>实时矢量瓦片</span></a>
+    <a class="quick-card wide" href="/points.html"><b>GeoJSON 点图层</b><span>5 万点保底</span></a>
+  </div>
+  <div id="stats"></div>
+</div>
+
+<div id="chat">
+  <div class="chat-head">
+    <div class="chat-badge">AI</div>
+    <div>
+      <div class="chat-title">空间助手</div>
+      <div class="chat-sub">附近 · 统计 · 路线</div>
+    </div>
+    <div class="chat-dot"></div>
+  </div>
+  <div id="chat-log"></div>
+  <div class="chat-row">
+    <input id="question" placeholder="例如：人民广场附近 1 公里有哪些医院？" />
+    <button onclick="askAgent()">发送</button>
+  </div>
+  <div class="hint chat-hint">试试：附近 1 公里有哪些医院 / 离外滩最近的 10 个餐厅 / 黄浦区各类 POI 有多少</div>
+</div>
+
+<script src="/vendor/leaflet.js"></script>
+<script>
+const map = L.map('map').setView([31.2304, 121.4737], 12);
+const COLORS = {
+  '餐饮': '#ef4444', '购物': '#f59e0b', '医院': '#dc2626',
+  '学校': '#8b5cf6', '交通': '#2563eb', '景点': '#10b981',
+  '商业': '#ec4899', '其他': '#64748b'
+};
+function colorFor(category) { return COLORS[category] || '#64748b'; }
+const legend = document.getElementById('legend');
+if (legend) {
+  legend.innerHTML = Object.entries(COLORS).map(([name, color]) =>
+    `<span><i style="background:${color}"></i>${name}</span>`).join('');
+}
+
+// CARTO 底图（国内可访问），坐标与 WGS84 数据对齐
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 18,
+  attribution: 'Tiles &copy; Esri'
+}).addTo(map);
+
+// 真实上海行政区边界（离线叠加，保证底图可见）
+fetch('/districts.json')
+  .then(r => r.json())
+  .then(data => {
+    L.geoJSON(data, {
+      style: { color: '#1d4ed8', weight: 1, fillColor: '#93c5fd', fillOpacity: 0.06 },
+      onEachFeature: (feature, layer) => {
+        const name = feature.properties && feature.properties.name;
+        if (name) layer.bindTooltip(name, { sticky: true });
+      }
+    }).addTo(map);
+  })
+  .catch(() => {});
+
+const markers = L.layerGroup().addTo(map);
+let circle = null;
+
+map.on('click', (e) => {
+  document.getElementById('lon').value = e.latlng.lng.toFixed(6);
+  document.getElementById('lat').value = e.latlng.lat.toFixed(6);
+  queryWithin();
+});
+
+function center() {
+  return {
+    lon: parseFloat(document.getElementById('lon').value),
+    lat: parseFloat(document.getElementById('lat').value),
+    radius: parseInt(document.getElementById('radius').value, 10) || 1000
+  };
+}
+
+async function queryWithin() {
+  const { lon, lat, radius } = center();
+  const category = document.getElementById('category').value;
+  const url = `/api/poi/within?lon=${lon}&lat=${lat}&radius=${radius}&limit=500`
+            + (category ? `&category=${encodeURIComponent(category)}` : '');
+  const t0 = performance.now();
+  try {
+    const json = await (await fetch(url)).json();
+    const ms = (performance.now() - t0).toFixed(0);
+    draw(json.data || [], lon, lat, radius);
+    renderStats(`周边结果：${(json.data || []).length} 条，耗时 ${ms} ms`);
+  } catch (err) {
+    renderStats('请求失败：' + err);
+  }
+}
+
+async function queryNearest() {
+  const { lon, lat } = center();
+  const t0 = performance.now();
+  try {
+    const json = await (await fetch(`/api/poi/nearest?lon=${lon}&lat=${lat}&limit=10`)).json();
+    const ms = (performance.now() - t0).toFixed(0);
+    draw(json.data || [], lon, lat, null);
+    renderStats(`最近邻：${(json.data || []).length} 条，耗时 ${ms} ms`);
+  } catch (err) {
+    renderStats('请求失败：' + err);
+  }
+}
+
+async function queryBuffer() {
+  const { lon, lat, radius } = center();
+  const t0 = performance.now();
+  try {
+    const json = await (await fetch(`/api/analysis/buffer?lon=${lon}&lat=${lat}&radius=${radius}`)).json();
+    const ms = (performance.now() - t0).toFixed(0);
+    const rows = json.data || [];
+    const html = rows.map(r => `${r.category}：${r.cnt}`).join('<br/>');
+    renderStats(`分类统计（${radius} 米，耗时 ${ms} ms）<br/>${html || '无数据'}`);
+  } catch (err) {
+    renderStats('请求失败：' + err);
+  }
+}
+
+function draw(rows, lon, lat, radius) {
+  markers.clearLayers();
+  if (circle) { map.removeLayer(circle); circle = null; }
+  if (radius) {
+    circle = L.circle([lat, lon], {
+      radius, color: '#2563eb', weight: 1, fillOpacity: 0.05
+    }).addTo(map);
+  }
+  L.circleMarker([lat, lon], {
+    radius: 6, color: '#dc2626', fillColor: '#dc2626', fillOpacity: 0.9
+  }).bindPopup('查询中心').addTo(markers);
+
+  for (const row of rows) {
+    const g = JSON.parse(row.geojson);
+    const [plon, plat] = g.coordinates;
+    L.circleMarker([plat, plon], {
+      radius: 4, color: '#ffffff', weight: 1,
+      fillColor: colorFor(row.category), fillOpacity: 0.95
+    }).bindPopup(`<b>${row.name}</b><br/>${row.category}<br/>距离 ${row.distance_m} m`)
+      .addTo(markers);
+  }
+}
+
+function renderStats(html) {
+  document.getElementById('stats').innerHTML = html;
+}
+
+async function askAgent() {
+  const input = document.getElementById('question');
+  const q = input.value.trim();
+  if (!q) return;
+  appendChat('你：' + q, 'me');
+  input.value = '';
+  try {
+    const resp = await fetch('/api/agent/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: q })
+    });
+    const json = await resp.json();
+    const d = json.data || {};
+    appendChat('助手：' + (d.answer || '没有返回结果'), 'bot');
+    if (d.data && d.data.length > 0 && d.data[0].geojson) {
+      const c = d.center || {};
+      draw(d.data, c.lon, c.lat, d.radius || null);
+      if (c.lon && c.lat) {
+        map.setView([c.lat, c.lon], Math.max(map.getZoom(), 13));
+      }
+    }
+  } catch (e) {
+    appendChat('请求失败：' + e, 'bot');
+  }
+}
+
+function appendChat(text, cls) {
+  const log = document.getElementById('chat-log');
+  const div = document.createElement('div');
+  div.className = 'msg ' + cls;
+  div.textContent = text;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+document.getElementById('question').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') askAgent();
+});
+
+queryWithin();
+</script>
+</body>
+</html>

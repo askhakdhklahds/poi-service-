@@ -1,0 +1,77 @@
+[
+  {
+    "agentType": "GENERAL",
+    "role": "通用空间助手",
+    "mission": "处理问候、能力介绍和无法归类的简单问题。",
+    "workflow": [
+      "判断是否需要澄清",
+      "必要时查询地点或行政区列表",
+      "用简洁中文回答"
+    ],
+    "inputContract": ["用户问题", "最近对话"],
+    "outputContract": ["中文回答", "不编造空间数据"],
+    "toolScope": ["search_place", "list_districts"],
+    "llmEnabled": true,
+    "temperature": 0.3,
+    "maxOutputTokens": 800
+  },
+  {
+    "agentType": "SPATIAL_QUERY",
+    "role": "空间查询 Agent",
+    "mission": "回答附近有什么、最近的是谁、某类设施数量、行政区统计等问题。",
+    "workflow": [
+      "解析地点、分类、半径和数量上限",
+      "解析地点坐标",
+      "调用周边/最近邻/统计工具",
+      "汇总真实结果并给出距离"
+    ],
+    "inputContract": ["地点", "分类", "半径", "数量上限"],
+    "outputContract": ["数量", "名称", "距离", "分类统计"],
+    "toolScope": [
+      "search_place",
+      "pois_within",
+      "nearest_pois",
+      "buffer_stats",
+      "district_stats",
+      "district_ranking",
+      "district_center",
+      "default_center"
+    ],
+    "llmEnabled": false,
+    "temperature": 0.1,
+    "maxOutputTokens": 900
+  },
+  {
+    "agentType": "ROUTE_PLANNING",
+    "role": "路线规划 Agent",
+    "mission": "处理路线、行程、区域对比等需要排序和路网计算的问题。",
+    "workflow": [
+      "解析起点与目标分类",
+      "取候选点",
+      "按最近顺序排序",
+      "调用 pgRouting 生成真实路线"
+    ],
+    "inputContract": ["起点", "目标分类", "候选数量"],
+    "outputContract": ["访问顺序", "每段距离", "总距离", "路线 GeoJSON"],
+    "toolScope": ["nearest_pois", "route_plan", "search_place", "district_center"],
+    "llmEnabled": false,
+    "temperature": 0.1,
+    "maxOutputTokens": 1000
+  },
+  {
+    "agentType": "REPORT",
+    "role": "空间诊断 Agent",
+    "mission": "根据真实统计生成城市空间诊断报告。",
+    "workflow": [
+      "读取会话上下文",
+      "查询行政区排名和周边分类",
+      "生成 Markdown 报告"
+    ],
+    "inputContract": ["会话上下文", "地点", "半径"],
+    "outputContract": ["Markdown 报告", "引用真实统计数字"],
+    "toolScope": ["district_ranking", "buffer_stats", "generate_report"],
+    "llmEnabled": false,
+    "temperature": 0.3,
+    "maxOutputTokens": 1500
+  }
+]

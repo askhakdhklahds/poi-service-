@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>POI MVT 矢量瓦片</title>
+  <link rel="icon" href="data:," />
+  <link href="/vendor/maplibre-gl.css" rel="stylesheet" />
+  <style>
+    html, body, #map { height: 100%; margin: 0; }
+    #tip {
+      position: absolute; top: 12px; left: 12px; z-index: 10;
+      background: rgba(255,255,255,.96); padding: 10px 14px; border-radius: 8px;
+      font: 13px/1.6 system-ui, "Microsoft YaHei", sans-serif;
+      box-shadow: 0 2px 8px rgba(0,0,0,.15);
+    }
+    #tip a { color: #2563eb; }
+  </style>
+</head>
+<body>
+<div id="map"></div>
+<div id="tip">
+  <b>真实上海 POI（OSM，85,864 条）</b><br/>
+  MVT 矢量瓦片 · 缩放 9–14 级<br/>
+  <button onclick="loadFallback()">加载备用点图层</button><br/>
+  <a href="/">返回周边查询页</a> · <a href="/points.html">GeoJSON 点图层</a> ·
+  <a href="/all-tiles.html">预生成瓦片</a>
+</div>
+<script src="/vendor/maplibre-gl.js"></script>
+<script>
+const ORIGIN = window.location.origin;
+const map = new maplibregl.Map({
+  container: 'map',
+  style: {
+    version: 8,
+    sources: {
+      // CARTO 底图，国内可访问
+      esri: {
+        type: 'raster',
+        tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+        tileSize: 256,
+        maxzoom: 18,
+        attribution: 'Tiles &copy; Esri'
+      },
+      poi: {
+        type: 'vector',
+        tiles: [ORIGIN + '/api/tiles/{z}/{x}/{y}.mvt'],
+        minzoom: 9,
+        maxzoom: 14
+      }
+    },
+    layers: [
+      { id: 'esri', type: 'raster', source: 'esri' },
+      {
+        id: 'poi',
+        type: 'circle',
+        source: 'poi',
+        'source-layer': 'poi',
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 1.2, 14, 3.5],
+          'circle-color': [
+            'match', ['get', 'category'],
+            '餐饮', '#ef4444',
+            '购物', '#f59e0b',
+            '医院', '#dc2626',
+            '学校', '#8b5cf6',
+            '交通', '#2563eb',
+            '景点', '#10b981',
+            '商业', '#ec4899',
+            '#64748b'
+          ],
+          'circle-opacity': 0.75
+        }
+      }
+    ]
+  },
+  center: [121.4737, 31.2304],
+  zoom: 12,
+  maxZoom: 18
+});
+
+map.addControl(new maplibregl.NavigationControl(), 'top-right');
+
+// 真实行政区边界叠加（离线数据）
+map.on('load', async () => {
+  try {
+    const geo = await (await fetch('/districts.json')).json();
+    map.addSource('districts', { type: 'geojson', data: geo });
+    map.addLayer({
+      id: 'district-fill', type: 'fill', source: 'districts',
+      paint: { 'fill-color': '#93c5fd', 'fill-opacity': 0.05 }
+    });
+    map.addLayer({
+      id: 'district-line', type: 'line', source: 'districts',
+      paint: { 'line-color': '#1d4ed8', 'line-width': 1.2 }
+    });
+  } catch (e) {
+    console.warn('district boundaries failed', e);
+  }
+
+  map.on('click', 'poi', async (e) => {
+    const p = e.features[0].properties;
+    if (!p.id) {
+      new maplibregl.Popup()
+        .setLngLat(e.lngLat)
+        .setHTML(`<b>聚合点（${p.cnt || '多个'}）</b><br/>${p.category || ''}`)
+        .addTo(map);
+      return;
+    }
+    try {
+      const json = await (await fetch(`/api/poi/${p.id}`)).json();
+      const d = json.data;
+      new maplibregl.Popup()
+        .setLngLat(e.lngLat)
+        .setHTML(`<b>${d.name || '未命名'}</b><br/>
+          ${d.category || ''}<br/>
+          ${Number(d.lng).toFixed(6)}, ${Number(d.lat).toFixed(6)}<br/>
+          所属区：${d.district_name || '—'}<br/>
+          来源：${d.source_id || '—'}`)
+        .addTo(map);
+    } catch (err) {
+      new maplibregl.Popup()
+        .setLngLat(e.lngLat)
+        .setHTML('详情加载失败')
+        .addTo(map);
+    }
+  });
+
+  map.on('mouseenter', 'poi', () => { map.getCanvas().style.cursor = 'pointer'; });
+  map.on('mouseleave', 'poi', () => { map.getCanvas().style.cursor = ''; });
+});
+
+async function loadFallback() {
+  try {
+    const geo = await (await fetch('/api/poi/geojson?limit=50000')).json();
+    if (map.getSource('poi-json')) {
+      map.getSource('poi-json').setData(geo);
+      return;
+    }
+    map.addSource('poi-json', { type: 'geojson', data: geo });
+    map.addLayer({
+      id: 'poi-json',
+      type: 'circle',
+      source: 'poi-json',
+      paint: {
+        'circle-radius': 2.5,
+        'circle-color': '#dc2626',
+        'circle-opacity': 0.75
+      }
+    });
+  } catch (e) {
+    console.error('fallback failed', e);
+  }
+}
+</script>
+</body>
+</html>
