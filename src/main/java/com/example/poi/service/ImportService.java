@@ -43,9 +43,14 @@ public class ImportService {
 
     @Async("importExecutor")
     public void process(long taskId, Path csvPath) {
+        processNow(taskId, csvPath, true);
+    }
+
+    public boolean processNow(long taskId, Path csvPath, boolean deleteOnFailure) {
         jdbc.update("UPDATE import_task SET status = 'RUNNING' WHERE id = ?", taskId);
         int total = 0;
         int success = 0;
+        boolean ok = false;
         try {
             long lines = Files.lines(csvPath).count();
             total = (int) Math.max(lines - 1, 0);
@@ -82,6 +87,7 @@ public class ImportService {
                         failed_cnt = ?, finished_at = now()
                     WHERE id = ?
                     """, total, success, Math.max(total - success, 0), taskId);
+            ok = true;
         } catch (Exception e) {
             jdbc.update("""
                     UPDATE import_task
@@ -91,10 +97,13 @@ public class ImportService {
                     """, total, success, Math.max(total - success, 0),
                     String.valueOf(e.getMessage()), taskId);
         } finally {
-            try {
-                Files.deleteIfExists(csvPath);
-            } catch (IOException ignored) {
+            if (ok || deleteOnFailure) {
+                try {
+                    Files.deleteIfExists(csvPath);
+                } catch (IOException ignored) {
+                }
             }
         }
+        return ok;
     }
 }
